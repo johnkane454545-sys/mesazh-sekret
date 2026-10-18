@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#8b3158">
+<title>Mesazh Sekret 💌</title>
+<style>
+:root{--pink:#fce7f0;--deep:#8b3158;--ink:#35232b;--muted:#786a70;--white:#fff}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(circle at top,#fff7fb,#f5e5ec 55%,#eee0e8);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink)}
+.card{width:min(100%,520px);background:#ffffffed;border:1px solid #ffffff;border-radius:28px;padding:clamp(22px,5vw,38px);box-shadow:0 20px 70px #71334c1c}
+.brand{text-align:center;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--deep);font-weight:800}
+.emoji{text-align:center;font-size:58px;margin:14px 0 4px}
+h1{text-align:center;font-size:clamp(27px,6vw,36px);margin:8px 0;color:var(--deep)}
+.sub{text-align:center;color:var(--muted);line-height:1.55;margin:0 auto 25px;max-width:390px}
+label{display:block;font-weight:700;font-size:14px;margin:16px 0 7px}
+input,textarea{width:100%;padding:14px 15px;border:1px solid #e7d4dd;border-radius:13px;background:#fff;font:inherit;color:var(--ink);outline:none}
+input:focus,textarea:focus{border-color:var(--deep);box-shadow:0 0 0 3px #8b31581a}
+textarea{min-height:145px;resize:vertical}
+button{width:100%;border:0;border-radius:14px;padding:15px 18px;background:var(--deep);color:#fff;font:inherit;font-weight:750;cursor:pointer;margin-top:18px;transition:transform .15s,opacity .15s}
+button:hover{opacity:.93}button:active{transform:scale(.99)}button:disabled{opacity:.6;cursor:wait}
+.secondary{background:#f7e7ee;color:var(--deep);margin-top:10px}
+.note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:17px}
+.hidden{display:none!important}
+.alert{margin-top:14px;border-radius:12px;padding:12px 14px;background:#fff0f0;color:#8a2424;font-size:14px;line-height:1.45}
+.message{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff7fb;border:1px solid #f0d7e3;border-radius:17px;padding:22px;line-height:1.8;font-size:17px;margin-top:20px}
+.footer{text-align:center;color:#95838b;font-size:12px;margin-top:20px}
+.pill{display:inline-block;background:#f7e7ee;color:var(--deep);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand">Një surprizë vetëm për ty</div>
+  <div class="emoji" id="heroEmoji">💌</div>
+  <h1 id="heading">Krijo një mesazh sekret</h1>
+  <p class="sub" id="subtitle">Shkruaj diçka që dëshiron t'ia thuash dikujt. Vetëm personi që ka kodin mund ta lexojë.</p>
+
+  <section id="createPanel">
+    <label for="message">Mesazhi yt</label>
+    <textarea id="message" maxlength="5000" placeholder="Shkruaj mesazhin sekret këtu..."></textarea>
+    <label for="password">Kodi sekret</label>
+    <input id="password" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="Vendos një kod (të paktën 4 karaktere)">
+    <button id="createBtn">Krijo linkun sekret ✨</button>
+    <div id="createResult" class="hidden">
+      <label for="shareLink">Linku yt sekret</label>
+      <input id="shareLink" readonly>
+      <button id="copyBtn">Kopjo linkun</button>
+      <p class="note">Dërgoja linkun personit dhe kodin sekret veçmas, p.sh. me një mesazh tjetër.</p>
+    </div>
+    <div id="createError" class="alert hidden"></div>
+    <p class="note">Pa regjistrim dhe pa pagesë. Mesazhi kodohet në shfletuesin tënd. Për siguri, mos përdor një kod të lehtë.</p>
+  </section>
+
+  <section id="openPanel" class="hidden">
+    <span class="pill">🔒 Mesazh i mbrojtur</span>
+    <p class="sub" style="margin-top:14px;margin-bottom:10px">Ke marrë një mesazh sekret. Shkruaj kodin që të është dërguar.</p>
+    <label for="openPassword">Kodi sekret</label>
+    <input id="openPassword" type="password" autocomplete="current-password" placeholder="Shkruaj kodin këtu">
+    <button id="openBtn">Hap mesazhin ❤️</button>
+    <div id="openError" class="alert hidden"></div>
+    <div id="revealedMessage" class="message hidden"></div>
+    <button id="againBtn" class="secondary hidden">Mbyll mesazhin</button>
+    <p class="note">Mos e ndaj kodin me persona të tjerë. Kushdo që ka edhe linkun, edhe kodin, mund ta hapë mesazhin.</p>
+  </section>
+  <div class="footer">Mesazh Sekret · Privatësia fillon me ty 💗</div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder();
+function b64url(bytes) {
+  let s = ''; for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function unb64url(s) {
+  s = s.replace(/-/g,'+').replace(/_/g,'/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s); return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+async function deriveKey(password, salt) {
+  const material = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+function setError(id, msg) { $(id).textContent = msg; $(id).classList.remove('hidden'); }
+function clearError(id) { $(id).classList.add('hidden'); $(id).textContent = ''; }
+function showOpenMode() {
+  $('createPanel').classList.add('hidden'); $('openPanel').classList.remove('hidden');
+  $('heading').textContent = 'Ke një mesazh sekret'; $('subtitle').textContent = 'Dikush ka përgatitur diçka të veçantë për ty.';
+  $('heroEmoji').textContent = '🔐';
+}
+const payload = location.hash.startsWith('#secret=') ? location.hash.slice(8) : '';
+if (payload) showOpenMode();
+
+$('createBtn').addEventListener('click', async () => {
+  clearError('createError');
+  const message = $('message').value.trim(), password = $('password').value;
+  if (!message) return setError('createError','Shkruaj mesazhin përpara se të krijosh linkun.');
+  if (password.length < 4) return setError('createError','Kodi duhet të ketë të paktën 4 karaktere.');
+  if (!window.crypto || !crypto.subtle) return setError('createError','Shfletuesi nuk e mbështet enkriptimin e sigurt. Hape faqen me HTTPS.');
+  $('createBtn').disabled = true; $('createBtn').textContent = 'Po krijohet...';
+  try {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(password, salt);
+    const cipher = await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(message));
+    const data = {s:b64url(salt),i:b64url(iv),c:b64url(new Uint8Array(cipher)),v:1};
+    const base = location.href.split('#')[0];
+    const link = base + '#secret=' + b64url(enc.encode(JSON.stringify(data)));
+    $('shareLink').value = link;
+    $('createResult').classList.remove('hidden');
+    $('createBtn').textContent = 'Krijo një link tjetër';
+  } catch (e) {
+    setError('createError','Nuk u krijua linku. Provo përsëri.');
+    $('createBtn').textContent = 'Krijo linkun sekret ✨';
+  } finally { $('createBtn').disabled = false; }
+});
+$('copyBtn').addEventListener('click', async () => {
+  const text = $('shareLink').value;
+  try { await navigator.clipboard.writeText(text); $('copyBtn').textContent = 'U kopjua! ✓'; }
+  catch(e) { $('shareLink').focus(); $('shareLink').select(); document.execCommand('copy'); $('copyBtn').textContent = 'Kopjoje linkun e përzgjedhur'; }
+});
+$('openBtn').addEventListener('click', async () => {
+  clearError('openError');
+  const password = $('openPassword').value;
+  if (!password) return setError('openError','Shkruaj kodin sekret.');
+  try {
+    const data = JSON.parse(new TextDecoder().decode(unb64url(payload)));
+    if (data.v !== 1) throw new Error('version');
+    const key = await deriveKey(password,unb64url(data.s));
+    const plain = await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64url(data.i)},key,unb64url(data.c));
+    $('revealedMessage').textContent = new TextDecoder().decode(plain);
+    $('revealedMessage').classList.remove('hidden'); $('againBtn').classList.remove('hidden');
+    $('openPassword').classList.add('hidden'); $('openBtn').classList.add('hidden');
+    $('heading').textContent = 'Mesazhi yt ❤️'; $('subtitle').textContent = 'Dikush dëshiron të ndajë diçka me ty.';
+    $('heroEmoji').textContent = '💌';
+  } catch(e) { setError('openError','Kodi nuk është i saktë ose linku është i dëmtuar. Provo përsëri.'); }
+});
+$('againBtn').addEventListener('click', () => {
+  $('revealedMessage').classList.add('hidden'); $('againBtn').classList.add('hidden');
+  $('openPassword').classList.remove('hidden'); $('openBtn').classList.remove('hidden');
+  $('openPassword').value = ''; clearError('openError');
+  $('heading').textContent = 'Ke një mesazh sekret'; $('heroEmoji').textContent = '🔐';
+});
+</script>
+</body>
+</html>
